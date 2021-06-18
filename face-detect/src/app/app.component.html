@@ -1,0 +1,4 @@
+<img #cameraVideo autoplay muted class="app-camera-video" style="display: none;">
+<canvas #faceRecognitionCanvasElRef class="app-camera-video"></canvas>
+<canvas #faceFrameCanvasElRef class="app-camera-video face-frame-canvas"></canvas>
+<img *ngIf="imageCropped" [src]="imageCropped">
