@@ -20,6 +20,7 @@ export class AppComponent implements AfterViewInit {
   private scoreThreshold = 0.5;
 
   private videoEl: HTMLVideoElement;
+  public expression;
 
   public imageCropped;
 
@@ -34,12 +35,15 @@ export class AppComponent implements AfterViewInit {
   private async faceDetect() {
     this.videoEl = this.cameraVideoElRef.nativeElement as HTMLVideoElement;
     await faceapi.nets.tinyFaceDetector.loadFromUri('/assets/weights/');
-    await this.http.get('http://192.168.15.73:5000//start_liveness_detection').toPromise();
+    await faceapi.nets.faceExpressionNet.loadFromUri('/assets/weights/');
+    const videoStream = await navigator.mediaDevices.getUserMedia({ video: true });
+    this.videoEl.srcObject = videoStream;
+    this.videoEl.onload = () => {
+      this.videoEl.width = 640;
+      this.videoEl.height = 480;
+    }
     setInterval(async () => {
-      const faceDetected = await this.http.get('http://192.168.15.73:5000//get_person_face').toPromise() as any;
-      if (faceDetected.has_face) {
-        this.processImage(faceDetected.image);
-      }
+      this.processImage();
     }, 250)
   }
 
@@ -49,26 +53,35 @@ export class AppComponent implements AfterViewInit {
     return new faceapi.TinyFaceDetectorOptions({ inputSize, scoreThreshold });
   }
 
-  public async processImage(base64Image) {
-    this.videoEl.src = `data:image/png;base64,${base64Image}`;
-    this.videoEl.onload = async () => {
-      const face = await faceapi.detectSingleFace(
-        this.videoEl,
-        this.getFaceDetectionOptions()
-      );
-
-      console.log(face);
+  public async processImage() {
+    const faces = await faceapi.detectAllFaces(
+      this.videoEl,
+      this.getFaceDetectionOptions()
+      ).withFaceExpressions();
 
 
-      if (!face) {
-        return;
-      }
+    console.log(faces);
 
+
+    if (!faces) {
+      return;
+    }
+
+    this.imageCropped = [];
+    faces.forEach(async face => {
+      let expression = 0;
+      Object.keys(face.expressions).forEach(item => {
+        if (expression < face.expressions[item]) {
+          expression = face.expressions[item];
+          this.expression = item;
+        }
+      })
+      face = face.detection;
       const faceFoundRect = {
-        left: face.box._x - 25,
-        top: face.box._y - 110,
-        width: face.box._width + 50,
-        height: face.box._height + 120
+        left: face.box._x,
+        top: face.box._y - 50,
+        width: face.box._width,
+        height: face.box._height + 100
       };
 
       const videoContentCanvas = document.createElement('canvas');
@@ -94,7 +107,9 @@ export class AppComponent implements AfterViewInit {
       targetCanvas.height = faceCrop.height;
       const targetCtx = targetCanvas.getContext('2d');
       targetCtx.drawImage(img, 0, 0);
-      this.imageCropped = targetCanvas.toDataURL('image/jpeg', 0.9);
-    }
+      this.imageCropped.push(targetCanvas.toDataURL('image/jpeg', 0.9));
+    });
+
   }
+
 }
